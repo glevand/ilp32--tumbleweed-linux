@@ -10,6 +10,8 @@
  * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
 
+#define DEBUG 1
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -2197,6 +2199,8 @@ static int elf_core_dump(struct coredump_params *cprm)
 	elf_addr_t e_shoff;
 	elf_addr_t *vma_filesz = NULL;
 
+	pr_devel("%s:%d >/n", __func__, __LINE__);
+
 	/*
 	 * We no longer stop all VM operations.
 	 * 
@@ -2220,6 +2224,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 	segs = current->mm->map_count;
 	segs += elf_core_extra_phdrs();
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	gate_vma = get_gate_vma(current->mm);
 	if (gate_vma != NULL)
 		segs++;
@@ -2236,17 +2241,21 @@ static int elf_core_dump(struct coredump_params *cprm)
 	 * Collect all the non-memory information about the process for the
 	 * notes.  This also sets up the file header.
 	 */
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (!fill_note_info(elf, e_phnum, &info, cprm->siginfo, cprm->regs))
 		goto cleanup;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	has_dumped = 1;
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+	pr_devel("%s:%d /n", __func__, __LINE__);
 
 	offset += sizeof(*elf);				/* Elf header */
 	offset += segs * sizeof(struct elf_phdr);	/* Program headers */
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	/* Write notes phdr entry */
 	{
 		size_t sz = get_note_info_size(&info);
@@ -2261,15 +2270,19 @@ static int elf_core_dump(struct coredump_params *cprm)
 		offset += sz;
 	}
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	dataoff = offset = roundup(offset, ELF_EXEC_PAGESIZE);
 
 	if (segs - 1 > ULONG_MAX / sizeof(*vma_filesz))
 		goto end_coredump;
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	vma_filesz = kvmalloc(array_size(sizeof(*vma_filesz), (segs - 1)),
 			      GFP_KERNEL);
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (ZERO_OR_NULL_PTR(vma_filesz))
 		goto end_coredump;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	for (i = 0, vma = first_vma(current, gate_vma); vma != NULL;
 			vma = next_vma(vma, gate_vma)) {
 		unsigned long dump_size;
@@ -2279,10 +2292,12 @@ static int elf_core_dump(struct coredump_params *cprm)
 		vma_data_size += dump_size;
 	}
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	offset += vma_data_size;
 	offset += elf_core_extra_data_size();
 	e_shoff = offset;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (e_phnum == PN_XNUM) {
 		shdr4extnum = kmalloc(sizeof(*shdr4extnum), GFP_KERNEL);
 		if (!shdr4extnum)
@@ -2290,14 +2305,18 @@ static int elf_core_dump(struct coredump_params *cprm)
 		fill_extnum_info(elf, shdr4extnum, e_shoff, segs);
 	}
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	offset = dataoff;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (!dump_emit(cprm, elf, sizeof(*elf)))
 		goto end_coredump;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (!dump_emit(cprm, phdr4note, sizeof(*phdr4note)))
 		goto end_coredump;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	/* Write program headers for segments dump */
 	for (i = 0, vma = first_vma(current, gate_vma); vma != NULL;
 			vma = next_vma(vma, gate_vma)) {
@@ -2321,20 +2340,25 @@ static int elf_core_dump(struct coredump_params *cprm)
 			goto end_coredump;
 	}
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (!elf_core_write_extra_phdrs(cprm, offset))
 		goto end_coredump;
 
- 	/* write out the notes section */
+ 	pr_devel("%s:%d /n", __func__, __LINE__);
+	/* write out the notes section */
 	if (!write_note_info(&info, cprm))
 		goto end_coredump;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (elf_coredump_extra_notes_write(cprm))
 		goto end_coredump;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	/* Align to page */
 	if (!dump_skip(cprm, dataoff - cprm->pos))
 		goto end_coredump;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	for (i = 0, vma = first_vma(current, gate_vma); vma != NULL;
 			vma = next_vma(vma, gate_vma)) {
 		unsigned long addr;
@@ -2358,26 +2382,33 @@ static int elf_core_dump(struct coredump_params *cprm)
 				goto end_coredump;
 		}
 	}
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	dump_truncate(cprm);
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (!elf_core_write_extra_data(cprm))
 		goto end_coredump;
 
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	if (e_phnum == PN_XNUM) {
 		if (!dump_emit(cprm, shdr4extnum, sizeof(*shdr4extnum)))
 			goto end_coredump;
 	}
+	pr_devel("%s:%d /n", __func__, __LINE__);
 
 end_coredump:
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	set_fs(fs);
 
 cleanup:
+	pr_devel("%s:%d /n", __func__, __LINE__);
 	free_note_info(&info);
 	kfree(shdr4extnum);
 	kvfree(vma_filesz);
 	kfree(phdr4note);
 	kfree(elf);
 out:
+	pr_devel("%s:%d </n", __func__, __LINE__);
 	return has_dumped;
 }
 
