@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # arch/arm64/boot/install.sh
 #
@@ -29,6 +29,10 @@ verify () {
 		exit 1
 	fi
 }
+
+export PS4='\[\033[0;33m\]+${BASH_SOURCE##*/}:${LINENO}: \[\033[0;37m\]'
+set -x
+
 
 # Make sure the files actually exist
 verify "$2"
