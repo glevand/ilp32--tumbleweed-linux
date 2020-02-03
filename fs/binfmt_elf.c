@@ -10,6 +10,8 @@
  * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
 
+#define DEBUG 1
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -1459,6 +1461,8 @@ static void fill_elf_note_phdr(struct elf_phdr *phdr, int sz, loff_t offset)
 static void fill_note(struct memelfnote *note, const char *name, int type, 
 		unsigned int sz, void *data)
 {
+	pr_err("***ILP32: %s:%d: %s: sz: %lu, data: %p\n", __func__, __LINE__, name, (unsigned long)sz, data);
+
 	note->name = name;
 	note->type = type;
 	note->datasz = sz;
@@ -1703,6 +1707,9 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 	unsigned int i;
 	unsigned int regset0_size = regset_size(t->task, &view->regsets[0]);
 
+	pr_err("***ILP32: %s:%d t: %p\n", __func__, __LINE__, t);
+	pr_err("***ILP32: %s:%d t->task: %p\n", __func__, __LINE__, t->task);
+
 	/*
 	 * NT_PRSTATUS is the one special case, because the regset data
 	 * goes into the pr_reg field inside the note contents, rather
@@ -1768,12 +1775,17 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 	struct core_thread *ct;
 	unsigned int i;
 
+	pr_err("***ILP32: %s:%d >\n", __func__, __LINE__);
+
+	memset(info, 0, sizeof(*info));
+
 	info->size = 0;
 	info->thread = NULL;
 
 	psinfo = kmalloc(sizeof(*psinfo), GFP_KERNEL);
 	if (psinfo == NULL) {
 		info->psinfo.data = NULL; /* So we don't free this wrongly */
+		pr_err("***ILP32: %s:%d <1\n", __func__, __LINE__);
 		return 0;
 	}
 
@@ -1787,6 +1799,7 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 		if (view->regsets[i].core_note_type != 0)
 			++info->thread_notes;
 
+	pr_err("***ILP32: %s:%d info->thread_notes: %u\n", __func__, __LINE__, info->thread_notes);
 	/*
 	 * Sanity check.  We rely on regset 0 being in NT_PRSTATUS,
 	 * since it is our one special case.
@@ -1807,13 +1820,22 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 	 * Allocate a structure for each thread.
 	 */
 	for (ct = &dump_task->mm->core_state->dumper; ct; ct = ct->next) {
-		t = kzalloc(offsetof(struct elf_thread_core_info,
-				     notes[info->thread_notes]),
-			    GFP_KERNEL);
+		t = kzalloc(
+			sizeof(struct elf_thread_core_info) * info->thread_notes,
+			GFP_KERNEL);
+
 		if (unlikely(!t))
 			return 0;
 
 		t->task = ct->task;
+
+		pr_err("***ILP32: %s:%d sizeof(struct elf_thread_core_info): %lu\n", __func__, __LINE__, (unsigned long)sizeof(struct elf_thread_core_info));
+		pr_err("***ILP32: %s:%d sizeof(struct elf_thread_core_info * info->thread_notes): %lu\n", __func__, __LINE__, (unsigned long)sizeof(struct elf_thread_core_info) * info->thread_notes);
+		pr_err("***ILP32: %s:%d offsetof: %lu\n", __func__, __LINE__, (unsigned long)offsetof(struct elf_thread_core_info, notes[info->thread_notes]));
+
+		pr_err("***ILP32: %s:%d t: %p\n", __func__, __LINE__, t);
+		pr_err("***ILP32: %s:%d t->task: %p\n", __func__, __LINE__, t->task);
+
 		if (ct->task == dump_task || !info->thread) {
 			t->next = info->thread;
 			info->thread = t;
@@ -1897,79 +1919,51 @@ static int write_note_info(struct elf_note_info *info,
 
 static void free_note_info(struct elf_note_info *info)
 {
-	struct elf_thread_core_info *threads = info->thread;
+	struct elf_thread_core_info *threads;
+
+	pr_err("***ILP32: %s:%d >\n", __func__, __LINE__);
+
+	pr_err("***ILP32: %s:%d info: %p\n", __func__, __LINE__, info);
+	pr_err("***ILP32: %s:%d info->thread: %p\n", __func__, __LINE__, info->thread);
+	pr_err("***ILP32: %s:%d info->thread_notes: %u\n", __func__, __LINE__, info->thread_notes);
+
+	threads = info->thread;
+
 	while (threads) {
 		unsigned int i;
-		struct elf_thread_core_info *t = threads;
+		struct elf_thread_core_info *t;
+
+		pr_err("***ILP32: %s:%d threads: %p\n", __func__, __LINE__, threads);
+
+		t = threads;
+
+		pr_err("***ILP32: %s:%d t: %p\n", __func__, __LINE__, t);
+		pr_err("***ILP32: %s:%d t->next: %p\n", __func__, __LINE__, t->next);
+		pr_err("***ILP32: %s:%d t->notes: %p\n", __func__, __LINE__, t->notes);
+
 		threads = t->next;
+
 		WARN_ON(t->notes[0].data && t->notes[0].data != &t->prstatus);
-		for (i = 1; i < info->thread_notes; ++i)
-			kfree(t->notes[i].data);
+
+		for (i = 1; i < info->thread_notes; ++i) {
+			pr_err("***ILP32: %s:%d i: %u, &t->notes[i]: %p\n", __func__, __LINE__, i, &t->notes[i]);
+			pr_err("***ILP32: %s:%d i: %u, t->notes[i].data: %p\n", __func__, __LINE__, i, t->notes[i].data);
+			kfree(t->notes[i].data); // *** faults here
+		}
+		pr_err("***ILP32: %s:%d t: %p\n", __func__, __LINE__, t);
 		kfree(t);
+		pr_err("***ILP32: %s:%d t done\n", __func__, __LINE__);
 	}
+
+	pr_err("***ILP32: %s:%d info->psinfo: %p\n", __func__, __LINE__, &info->psinfo);
+	pr_err("***ILP32: %s:%d info->psinfo.data: %p\n", __func__, __LINE__, info->psinfo.data);
 	kfree(info->psinfo.data);
+
+	pr_err("***ILP32: %s:%d info->files: %p\n", __func__, __LINE__, &info->files);
+	pr_err("***ILP32: %s:%d info->files.data: %p\n", __func__, __LINE__, info->files.data);
 	kvfree(info->files.data);
-}
 
-#else
-// !CORE_DUMP_USE_REGSET
-#endif
-
-	return 1;
-}
-
-static size_t get_note_info_size(struct elf_note_info *info)
-{
-	int sz = 0;
-	int i;
-
-	for (i = 0; i < info->numnote; i++)
-		sz += notesize(info->notes + i);
-
-	sz += info->thread_status_size;
-
-	return sz;
-}
-
-static int write_note_info(struct elf_note_info *info,
-			   struct coredump_params *cprm)
-{
-	struct elf_thread_status *ets;
-	int i;
-
-	for (i = 0; i < info->numnote; i++)
-		if (!writenote(info->notes + i, cprm))
-			return 0;
-
-	/* write out the thread status notes section */
-	list_for_each_entry(ets, &info->thread_list, list) {
-		for (i = 0; i < ets->num_notes; i++)
-			if (!writenote(&ets->notes[i], cprm))
-				return 0;
-	}
-
-	return 1;
-}
-
-static void free_note_info(struct elf_note_info *info)
-{
-	while (!list_empty(&info->thread_list)) {
-		struct list_head *tmp = info->thread_list.next;
-		list_del(tmp);
-		kfree(list_entry(tmp, struct elf_thread_status, list));
-	}
-
-	/* Free data possibly allocated by fill_files_note(): */
-	if (info->notes_files)
-		kvfree(info->notes_files->data);
-
-	kfree(info->prstatus);
-	kfree(info->psinfo);
-	kfree(info->notes);
-	kfree(info->fpu);
-#ifdef ELF_CORE_COPY_XFPREGS
-	kfree(info->xfpu);
-#endif
+	pr_err("***ILP32: %s:%d <\n", __func__, __LINE__);
 }
 
 #endif
@@ -2039,6 +2033,8 @@ static int elf_core_dump(struct coredump_params *cprm)
 	elf_addr_t e_shoff;
 	elf_addr_t *vma_filesz = NULL;
 
+	pr_err("***ILP32: %s:%d >\n", __func__, __LINE__);
+
 	/*
 	 * We no longer stop all VM operations.
 	 * 
@@ -2062,6 +2058,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 	segs = current->mm->map_count;
 	segs += elf_core_extra_phdrs();
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	gate_vma = get_gate_vma(current->mm);
 	if (gate_vma != NULL)
 		segs++;
@@ -2078,22 +2075,30 @@ static int elf_core_dump(struct coredump_params *cprm)
 	 * Collect all the non-memory information about the process for the
 	 * notes.  This also sets up the file header.
 	 */
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (!fill_note_info(elf, e_phnum, &info, cprm->siginfo, cprm->regs))
 		goto cleanup;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	has_dumped = 1;
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 
 	offset += sizeof(*elf);				/* Elf header */
 	offset += segs * sizeof(struct elf_phdr);	/* Program headers */
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	/* Write notes phdr entry */
 	{
 		size_t sz = get_note_info_size(&info);
 
+		pr_err("***ILP32: %s:%d sz: %lu\n", __func__, __LINE__, (unsigned long)sz);
+
 		sz += elf_coredump_extra_notes_size();
+
+		pr_err("***ILP32: %s:%d sz: %lu\n", __func__, __LINE__, (unsigned long)sz);
 
 		phdr4note = kmalloc(sizeof(*phdr4note), GFP_KERNEL);
 		if (!phdr4note)
@@ -2103,15 +2108,19 @@ static int elf_core_dump(struct coredump_params *cprm)
 		offset += sz;
 	}
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	dataoff = offset = roundup(offset, ELF_EXEC_PAGESIZE);
 
 	if (segs - 1 > ULONG_MAX / sizeof(*vma_filesz))
 		goto end_coredump;
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	vma_filesz = kvmalloc(array_size(sizeof(*vma_filesz), (segs - 1)),
 			      GFP_KERNEL);
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (ZERO_OR_NULL_PTR(vma_filesz))
 		goto end_coredump;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	for (i = 0, vma = first_vma(current, gate_vma); vma != NULL;
 			vma = next_vma(vma, gate_vma)) {
 		unsigned long dump_size;
@@ -2121,10 +2130,12 @@ static int elf_core_dump(struct coredump_params *cprm)
 		vma_data_size += dump_size;
 	}
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	offset += vma_data_size;
 	offset += elf_core_extra_data_size();
 	e_shoff = offset;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (e_phnum == PN_XNUM) {
 		shdr4extnum = kmalloc(sizeof(*shdr4extnum), GFP_KERNEL);
 		if (!shdr4extnum)
@@ -2132,14 +2143,18 @@ static int elf_core_dump(struct coredump_params *cprm)
 		fill_extnum_info(elf, shdr4extnum, e_shoff, segs);
 	}
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	offset = dataoff;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (!dump_emit(cprm, elf, sizeof(*elf)))
 		goto end_coredump;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (!dump_emit(cprm, phdr4note, sizeof(*phdr4note)))
 		goto end_coredump;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	/* Write program headers for segments dump */
 	for (i = 0, vma = first_vma(current, gate_vma); vma != NULL;
 			vma = next_vma(vma, gate_vma)) {
@@ -2163,20 +2178,26 @@ static int elf_core_dump(struct coredump_params *cprm)
 			goto end_coredump;
 	}
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (!elf_core_write_extra_phdrs(cprm, offset))
 		goto end_coredump;
+
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 
  	/* write out the notes section */
 	if (!write_note_info(&info, cprm))
 		goto end_coredump;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (elf_coredump_extra_notes_write(cprm))
 		goto end_coredump;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	/* Align to page */
 	if (!dump_skip(cprm, dataoff - cprm->pos))
 		goto end_coredump;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	for (i = 0, vma = first_vma(current, gate_vma); vma != NULL;
 			vma = next_vma(vma, gate_vma)) {
 		unsigned long addr;
@@ -2200,26 +2221,38 @@ static int elf_core_dump(struct coredump_params *cprm)
 				goto end_coredump;
 		}
 	}
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	dump_truncate(cprm);
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (!elf_core_write_extra_data(cprm))
 		goto end_coredump;
 
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	if (e_phnum == PN_XNUM) {
 		if (!dump_emit(cprm, shdr4extnum, sizeof(*shdr4extnum)))
 			goto end_coredump;
 	}
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 
 end_coredump:
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	set_fs(fs);
 
 cleanup:
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	free_note_info(&info);
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	kfree(shdr4extnum);
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	kvfree(vma_filesz);
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	kfree(phdr4note);
+	pr_err("***ILP32: %s:%d\n", __func__, __LINE__);
 	kfree(elf);
 out:
+	pr_err("***ILP32: %s:%d <\n", __func__, __LINE__);
 	return has_dumped;
 }
 

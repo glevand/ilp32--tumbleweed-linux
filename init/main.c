@@ -1120,6 +1120,8 @@ static int __ref kernel_init(void *unused)
 	 */
 	pti_finalize();
 
+	pr_err("***ILP32: %s:%d >\n", __func__, __LINE__);
+
 	system_state = SYSTEM_RUNNING;
 	numa_default_policy();
 

@@ -2582,6 +2582,7 @@ relock:
 		trace_signal_deliver(SIGKILL, SEND_SIG_NOINFO,
 				&sighand->action[SIGKILL - 1]);
 		recalc_sigpending();
+		pr_err("***ILP32: %s:%d goto fatal\n", __func__, __LINE__);
 		goto fatal;
 	}
 
@@ -2703,6 +2704,7 @@ relock:
 			continue;
 		}
 
+	pr_err("***ILP32: %s:%d enter fatal\n", __func__, __LINE__);
 	fatal:
 		spin_unlock_irq(&sighand->siglock);
 		if (unlikely(cgroup_task_frozen(current)))
@@ -2725,18 +2727,21 @@ relock:
 			 * first and our do_group_exit call below will use
 			 * that value and ignore the one we pass it.
 			 */
+			pr_err("***ILP32: %s:%d do_coredump >\n", __func__, __LINE__);
 			do_coredump(&ksig->info);
 		}
 
 		/*
 		 * Death signals, no core dump.
 		 */
+		pr_err("***ILP32: %s:%d do_group_exit >\n", __func__, __LINE__);
 		do_group_exit(ksig->info.si_signo);
 		/* NOTREACHED */
 	}
 	spin_unlock_irq(&sighand->siglock);
 
 	ksig->sig = signr;
+	//pr_err("***ILP32: %s:%d <\n", __func__, __LINE__);
 	return ksig->sig > 0;
 }
 

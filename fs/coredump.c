@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
+#define DEBUG 1
+
 #include <linux/slab.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
@@ -590,6 +592,8 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 		 */
 		.mm_flags = mm->flags,
 	};
+
+	pr_err("***ILP32: %s:%d >\n", __func__, __LINE__);
 
 	audit_core_dumps(siginfo->si_signo);
 
